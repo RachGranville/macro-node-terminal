@@ -565,7 +565,7 @@
     "China": "CHINA",
     "India": "ÍNDIA",
     "Brazil": "BRASIL",
-    "Mexico": "MÉXICO"
+    "Egypt": "EGITO"
   };
 
   // Correções de ISO para entradas do natural-earth com -99 ou disputas:
@@ -582,6 +582,16 @@
 
   // Países com telemetria completa (heatmap âmbar no globo)
   const paisesComDados = new Set(Object.keys(nomesPaises));
+
+  // Formatadores de moeda local
+  const SYM = { USD: "$", EUR: "€", GBP: "£", JPY: "¥", INR: "₹", BRL: "R$", EGP: "E£", CNY: "¥", HKD: "HK$" };
+  function formataPreco(price, currency) {
+    if (price == null) return "—";
+    const sym = SYM[currency] || (currency ? currency + " " : "$");
+    const sep = (currency === "JPY") ? 0 : 2;
+    const formatado = price.toFixed(sep).replace(/\B(?=(\d{3})+(?!\d))/g, ".").replace(/\.(\d{1,2})$/, ',$1');
+    return sym + " " + formatado;
+  }
 
   const sidebar = document.getElementById('sidebar');
   const globeViz = document.getElementById('globe-viz');
@@ -689,20 +699,24 @@
       const cDiv = document.getElementById('change');
 
       if (data.parcial) {
-        // Painel parcial: sem ETF mapeado
+        // Painel parcial: sem ação representativa mapeada
         document.getElementById('macro-block').style.display = '';
         renderizaMacro(data.macro);
         document.getElementById('label-bench').style.display = 'none';
         document.getElementById('price-card').classList.add('dim');
         document.getElementById('bench').innerText = '—';
-        document.getElementById('tick').innerText = 'SEM ETF MAPEADO';
+        document.getElementById('tick').innerText = 'SEM ATIVO MAPEADO';
         document.getElementById('price').innerText = '—';
         cDiv.innerText = '—';
         cDiv.style.color = 'var(--dim)';
       } else {
         document.getElementById('bench').innerText = data.bench;
-        document.getElementById('tick').innerText = data.ticker;
-        document.getElementById('price').innerText = "$" + data.price.toFixed(2).replace('.', ',');
+        const tickerLine = data.exchange
+          ? `${data.ticker} <span style="color: var(--dim-2);">· ${data.exchange}</span>`
+          : data.ticker;
+        document.getElementById('tick').innerHTML =
+          `${tickerLine}<div style="color: var(--accent); font-size: 13px; margin-top: 4px; letter-spacing: 0.3px;">${data.companyName || ''}</div>`;
+        document.getElementById('price').innerText = formataPreco(data.price, data.currency);
         const change = Number(data.change);
         cDiv.style.color = change >= 0 ? 'var(--positive)' : 'var(--alert)';
         cDiv.innerHTML = (change >= 0 ? "▲ " : "▼ ") +

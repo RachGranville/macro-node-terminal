@@ -3,19 +3,19 @@ const BASE = "http://localhost:3000";
 
 const VALIDOS = [
   "United States of America", "United Kingdom", "Germany", "France",
-  "Japan", "China", "India", "Brazil", "Mexico"
+  "Japan", "China", "India", "Brazil", "Egypt"
 ];
 
 const ESPERADO = {
-  "United States of America": { iso: "US", iso3: "USA", ticker: "SPY",  bench: "S&P 500",     ptBr: "ESTADOS UNIDOS" },
-  "United Kingdom":           { iso: "GB", iso3: "GBR", ticker: "EWU",  bench: "FTSE 100",    ptBr: "REINO UNIDO" },
-  "Germany":                  { iso: "DE", iso3: "DEU", ticker: "EWG",  bench: "DAX 40",      ptBr: "ALEMANHA" },
-  "France":                   { iso: "FR", iso3: "FRA", ticker: "EWQ",  bench: "CAC 40",      ptBr: "FRANÇA" },
-  "Japan":                    { iso: "JP", iso3: "JPN", ticker: "EWJ",  bench: "NIKKEI 225",  ptBr: "JAPÃO" },
-  "China":                    { iso: "CN", iso3: "CHN", ticker: "FXI",  bench: "HSCEI",       ptBr: "CHINA" },
-  "India":                    { iso: "IN", iso3: "IND", ticker: "INDA", bench: "NIFTY 50",    ptBr: "ÍNDIA" },
-  "Brazil":                   { iso: "BR", iso3: "BRA", ticker: "EWZ",  bench: "IBOVESPA",    ptBr: "BRASIL" },
-  "Mexico":                   { iso: "MX", iso3: "MEX", ticker: "EWW",  bench: "IPC MÉXICO",  ptBr: "MÉXICO" }
+  "United States of America": { iso: "US", iso3: "USA", ticker: "NVDA",        bench: "S&P 500",    ptBr: "ESTADOS UNIDOS", currency: "USD" },
+  "United Kingdom":           { iso: "GB", iso3: "GBR", ticker: "BP.L",        bench: "FTSE 100",   ptBr: "REINO UNIDO",    currency: "GBP" },
+  "Germany":                  { iso: "DE", iso3: "DEU", ticker: "SAP.DE",      bench: "DAX 40",     ptBr: "ALEMANHA",       currency: "EUR" },
+  "France":                   { iso: "FR", iso3: "FRA", ticker: "MC.PA",       bench: "CAC 40",     ptBr: "FRANÇA",         currency: "EUR" },
+  "Japan":                    { iso: "JP", iso3: "JPN", ticker: "7203.T",      bench: "NIKKEI 225", ptBr: "JAPÃO",          currency: "JPY" },
+  "China":                    { iso: "CN", iso3: "CHN", ticker: "BABA",        bench: "HSCEI",      ptBr: "CHINA",          currency: "USD" },
+  "India":                    { iso: "IN", iso3: "IND", ticker: "RELIANCE.NS", bench: "NIFTY 50",   ptBr: "ÍNDIA",          currency: "INR" },
+  "Brazil":                   { iso: "BR", iso3: "BRA", ticker: "VALE3.SA",    bench: "IBOVESPA",   ptBr: "BRASIL",         currency: "BRL" },
+  "Egypt":                    { iso: "EG", iso3: "EGY", ticker: "HRHO.CA",     bench: "EGX 30",     ptBr: "EGITO",          currency: "EGP" }
 };
 
 const PORTFOLIO_CATS = ["AÇÕES","DERIVATIVO","FUTURO","CÂMBIO","AÇÕES","RENDA FIXA","RENDA FIXA","ESG","ESG","ESG"];
@@ -39,8 +39,11 @@ for (const c of VALIDOS) {
   if (d.ticker !== exp.ticker) errors.push(`ticker ${d.ticker}≠${exp.ticker}`);
   if (d.bench !== exp.bench) errors.push(`bench ${d.bench}≠${exp.bench}`);
   if (d.countryDisplay !== exp.ptBr) errors.push(`ptBr ${d.countryDisplay}≠${exp.ptBr}`);
+  if (d.currency !== exp.currency) errors.push(`currency ${d.currency}≠${exp.currency}`);
   if (typeof d.price !== "number" || d.price <= 0) errors.push(`price inválido: ${d.price}`);
   if (typeof d.change !== "number") errors.push(`change inválido: ${d.change}`);
+  if (!d.companyName) errors.push(`companyName ausente`);
+  if (!d.exchange) errors.push(`exchange ausente`);
   if (!d.flag || !d.flag.includes(exp.iso)) errors.push(`flag URL: ${d.flag}`);
   if (!Array.isArray(d.news) || d.news.length === 0) errors.push(`news vazio`);
   if (d.news.length > 5) errors.push(`news > 5: ${d.news.length}`);
@@ -49,7 +52,7 @@ for (const c of VALIDOS) {
   if (d.portfolio[5].asset !== `${exp.iso3} 10Y`) errors.push(`bond 10Y: ${d.portfolio[5].asset}`);
 
   if (errors.length === 0) {
-    console.log(`  ✓ ${c.padEnd(26)} | ${exp.iso3} | ${d.ticker} $${d.price.toFixed(2)} ${d.change >= 0 ? '+' : ''}${d.change.toFixed(2)}% | ${d.news.length} news`);
+    console.log(`  ✓ ${c.padEnd(26)} | ${d.ticker.padEnd(13)} ${d.currency} ${d.price.toFixed(2).padStart(9)} ${d.change >= 0 ? '+' : ''}${d.change.toFixed(2)}% | ${d.companyName}`);
     pass++;
   } else {
     fail++;

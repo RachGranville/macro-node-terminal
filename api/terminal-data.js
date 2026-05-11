@@ -5,17 +5,17 @@ const TTL_MS = 60_000;
 
 // Registro de ativos por país.
 // NOTA: as chaves precisam permanecer em inglês porque vêm do GeoJSON externo (campo ADMIN).
-// Tickers são ETFs MSCI US-listed por país (única opção compatível com o plano free da Finnhub).
+// Cada país aponta para uma "blue chip" representativa, cotada na bolsa nacional (via Yahoo Finance).
 const REGISTRY = {
-  "United States of America": { iso: "US", iso3: "USA", ticker: "SPY",  bench: "S&P 500",    ptBr: "ESTADOS UNIDOS", searchTerms: ['"United States"', '"U.S."', '"USA"'] },
-  "United Kingdom":           { iso: "GB", iso3: "GBR", ticker: "EWU",  bench: "FTSE 100",   ptBr: "REINO UNIDO",    searchTerms: ['"United Kingdom"', '"U.K."', '"Britain"'] },
-  "Germany":                  { iso: "DE", iso3: "DEU", ticker: "EWG",  bench: "DAX 40",     ptBr: "ALEMANHA",       searchTerms: ['"Germany"', '"German"'] },
-  "France":                   { iso: "FR", iso3: "FRA", ticker: "EWQ",  bench: "CAC 40",     ptBr: "FRANÇA",         searchTerms: ['"France"'] },
-  "Japan":                    { iso: "JP", iso3: "JPN", ticker: "EWJ",  bench: "NIKKEI 225", ptBr: "JAPÃO",          searchTerms: ['"Japan"', '"Japanese"'] },
-  "China":                    { iso: "CN", iso3: "CHN", ticker: "FXI",  bench: "HSCEI",      ptBr: "CHINA",          searchTerms: ['"China"', '"Beijing"'] },
-  "India":                    { iso: "IN", iso3: "IND", ticker: "INDA", bench: "NIFTY 50",   ptBr: "ÍNDIA",          searchTerms: ['"India"', '"Indian"'] },
-  "Brazil":                   { iso: "BR", iso3: "BRA", ticker: "EWZ",  bench: "IBOVESPA",   ptBr: "BRASIL",         searchTerms: ['"Brazil"', '"Brasília"'] },
-  "Mexico":                   { iso: "MX", iso3: "MEX", ticker: "EWW",  bench: "IPC MÉXICO", ptBr: "MÉXICO",         searchTerms: ['"Mexico"', '"Mexican"'] }
+  "United States of America": { iso: "US", iso3: "USA", ticker: "NVDA",        bench: "S&P 500",    ptBr: "ESTADOS UNIDOS", searchTerms: ['"United States"', '"U.S."', '"USA"'] },
+  "United Kingdom":           { iso: "GB", iso3: "GBR", ticker: "BP.L",        bench: "FTSE 100",   ptBr: "REINO UNIDO",    searchTerms: ['"United Kingdom"', '"U.K."', '"Britain"'] },
+  "Germany":                  { iso: "DE", iso3: "DEU", ticker: "SAP.DE",      bench: "DAX 40",     ptBr: "ALEMANHA",       searchTerms: ['"Germany"', '"German"'] },
+  "France":                   { iso: "FR", iso3: "FRA", ticker: "MC.PA",       bench: "CAC 40",     ptBr: "FRANÇA",         searchTerms: ['"France"'] },
+  "Japan":                    { iso: "JP", iso3: "JPN", ticker: "7203.T",      bench: "NIKKEI 225", ptBr: "JAPÃO",          searchTerms: ['"Japan"', '"Japanese"'] },
+  "China":                    { iso: "CN", iso3: "CHN", ticker: "BABA",        bench: "HSCEI",      ptBr: "CHINA",          searchTerms: ['"China"', '"Beijing"'] },
+  "India":                    { iso: "IN", iso3: "IND", ticker: "RELIANCE.NS", bench: "NIFTY 50",   ptBr: "ÍNDIA",          searchTerms: ['"India"', '"Indian"'] },
+  "Brazil":                   { iso: "BR", iso3: "BRA", ticker: "VALE3.SA",    bench: "IBOVESPA",   ptBr: "BRASIL",         searchTerms: ['"Brazil"', '"Brasília"'] },
+  "Egypt":                    { iso: "EG", iso3: "EGY", ticker: "HRHO.CA",     bench: "EGX 30",     ptBr: "EGITO",          searchTerms: ['"Egypt"', '"Egyptian"', '"Cairo"'] }
 };
 
 const TIER_1 = new Set([
@@ -111,23 +111,66 @@ const filtraEManchetes = (articles, noiseTerms) => {
   return headlines;
 };
 
-async function montaRespostaCompleta(config, country, NEWS_KEY, FINNHUB_KEY) {
+// Nomes amigáveis quando o Yahoo devolve identificadores técnicos.
+const COMPANY_OVERRIDES = {
+  "VALE3.SA":    "Vale S.A.",
+  "SAP.DE":      "SAP SE",
+  "BP.L":        "BP plc",
+  "HRHO.CA":     "EFG Hermes Holding",
+  "7203.T":      "Toyota Motor Corp.",
+  "MC.PA":       "LVMH",
+  "RELIANCE.NS": "Reliance Industries",
+  "NVDA":        "NVIDIA Corp.",
+  "BABA":        "Alibaba Group"
+};
+
+// Yahoo Finance v8 chart endpoint — não exige chave, cobre todas as bolsas globais.
+async function buscaCotacaoYahoo(ticker) {
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1d&range=2d`;
+  const r = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0" } });
+  if (!r.ok) throw new Error(`Yahoo HTTP ${r.status} para ${ticker}`);
+  const j = await r.json();
+  const meta = j.chart?.result?.[0]?.meta;
+  if (!meta || !meta.regularMarketPrice) {
+    throw new Error(`Yahoo sem cotação para ${ticker}: ${j.chart?.error?.description || "meta vazia"}`);
+  }
+
+  let price = meta.regularMarketPrice;
+  let prevClose = meta.chartPreviousClose || meta.previousClose;
+  let currency = meta.currency;
+
+  // GBp (pence) → GBP (libras): Yahoo cota LSE em pence; normalizamos para libras.
+  if (currency === "GBp") {
+    price = price / 100;
+    if (prevClose) prevClose = prevClose / 100;
+    currency = "GBP";
+  }
+
+  const change = prevClose ? ((price - prevClose) / prevClose) * 100 : 0;
+
+  const rawName = (meta.shortName || meta.longName || ticker).replace(/\s+/g, " ").trim();
+  const companyName = COMPANY_OVERRIDES[ticker] || rawName;
+
+  return {
+    price,
+    change,
+    currency,
+    companyName,
+    exchange: meta.fullExchangeName || meta.exchangeName
+  };
+}
+
+async function montaRespostaCompleta(config, country, NEWS_KEY) {
   const countryOr = config.searchTerms.join(" OR ");
   const econOr = '(economy OR market OR stocks OR inflation OR rates OR GDP OR monetary OR fiscal OR trade OR exports OR tariff OR "central bank" OR equities OR bonds OR yield OR debt OR recession OR growth)';
   const q = encodeURIComponent(`(${countryOr}) AND ${econOr}`);
 
-  const [newsRes, stockRes] = await Promise.all([
+  const [newsRes, stock] = await Promise.all([
     fetch(`https://newsapi.org/v2/everything?q=${q}&searchIn=title&sortBy=publishedAt&pageSize=60&language=en&apiKey=${NEWS_KEY}`),
-    fetch(`https://finnhub.io/api/v1/quote?symbol=${config.ticker}&token=${FINNHUB_KEY}`)
+    buscaCotacaoYahoo(config.ticker)
   ]);
 
   const newsData = await newsRes.json();
-  const stock = await stockRes.json();
-
-  if (stock.error || !stock.c || stock.c === 0) {
-    return { __error502: `Finnhub não retornou cotação para ${config.ticker}: ${stock.error || "preço zero"}` };
-  }
-
   const noise = config.searchTerms.map(t => t.replace(/"/g, "").toLowerCase());
   const news = filtraEManchetes(newsData.articles, noise);
 
@@ -151,8 +194,11 @@ async function montaRespostaCompleta(config, country, NEWS_KEY, FINNHUB_KEY) {
     iso3: config.iso3,
     countryDisplay: config.ptBr,
     news,
-    price: stock.c,
-    change: stock.dp,
+    price: stock.price,
+    change: stock.change,
+    currency: stock.currency,
+    companyName: stock.companyName,
+    exchange: stock.exchange,
     bench: config.bench,
     ticker: config.ticker,
     portfolio
@@ -202,12 +248,11 @@ async function montaRespostaParcial({ country, iso, iso3, pop, gdp, incomeGrp, r
 export default async function handler(req, res) {
   const { country, iso, iso3, pop, gdp, incomeGrp, region } = req.query;
   const NEWS_KEY = process.env.NEWS_API_KEY;
-  const FINNHUB_KEY = process.env.FINNHUB_API_KEY;
 
-  if (!NEWS_KEY || !FINNHUB_KEY) {
+  if (!NEWS_KEY) {
     return res.status(500).json({
       error: true,
-      message: "Chaves de API ausentes. Configure NEWS_API_KEY e FINNHUB_API_KEY."
+      message: "Chave NEWS_API_KEY ausente."
     });
   }
 
@@ -226,9 +271,10 @@ export default async function handler(req, res) {
   try {
     let data;
     if (config) {
-      data = await montaRespostaCompleta(config, country, NEWS_KEY, FINNHUB_KEY);
-      if (data.__error502) {
-        return res.status(502).json({ error: true, message: data.__error502 });
+      try {
+        data = await montaRespostaCompleta(config, country, NEWS_KEY);
+      } catch (e) {
+        return res.status(502).json({ error: true, message: e.message });
       }
     } else {
       if (!iso || !iso3 || iso === "-99" || iso3 === "-99") {
