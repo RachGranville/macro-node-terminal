@@ -44,15 +44,20 @@ for (const c of VALIDOS) {
   if (typeof d.change !== "number") errors.push(`change inválido: ${d.change}`);
   if (!d.companyName) errors.push(`companyName ausente`);
   if (!d.exchange) errors.push(`exchange ausente`);
+  if (typeof d.benchPrice !== "number" || d.benchPrice <= 0) errors.push(`benchPrice inválido: ${d.benchPrice}`);
+  if (typeof d.benchChange !== "number") errors.push(`benchChange inválido: ${d.benchChange}`);
+  if (!d.benchTicker) errors.push(`benchTicker ausente`);
   if (!d.flag || !d.flag.includes(exp.iso)) errors.push(`flag URL: ${d.flag}`);
-  if (!Array.isArray(d.news) || d.news.length === 0) errors.push(`news vazio`);
+  if (!Array.isArray(d.news)) errors.push(`news não é array`);
   if (d.news.length > 5) errors.push(`news > 5: ${d.news.length}`);
+  // Nota: news pode vir vazio se a NewsAPI free atingiu o rate limit diário (100 req/24h).
   if (!Array.isArray(d.portfolio) || d.portfolio.length !== 10) errors.push(`portfolio ≠ 10`);
   if (d.portfolio.map(p => p.cat).join(",") !== PORTFOLIO_CATS.join(",")) errors.push(`portfolio cats wrong`);
   if (d.portfolio[5].asset !== `${exp.iso3} 10Y`) errors.push(`bond 10Y: ${d.portfolio[5].asset}`);
 
   if (errors.length === 0) {
-    console.log(`  ✓ ${c.padEnd(26)} | ${d.ticker.padEnd(13)} ${d.currency} ${d.price.toFixed(2).padStart(9)} ${d.change >= 0 ? '+' : ''}${d.change.toFixed(2)}% | ${d.companyName}`);
+    const benchVal = d.benchPrice.toLocaleString('pt-BR', { maximumFractionDigits: 0 });
+    console.log(`  ✓ ${c.padEnd(26)} | ${d.ticker.padEnd(13)} ${d.currency} ${d.price.toFixed(2).padStart(9)} ${d.change >= 0 ? '+' : ''}${d.change.toFixed(2)}% | ${d.bench.padEnd(11)} ${benchVal.padStart(8)} pts ${d.benchChange >= 0 ? '+' : ''}${d.benchChange.toFixed(2)}%`);
     pass++;
   } else {
     fail++;
@@ -130,9 +135,9 @@ console.log("\n[3] Erros esperados");
 
 console.log("\n[4] Cache server-side (X-Cache header)");
 {
-  // Limpa cache forçando key nova
-  const country = "Vietnam";
-  const params = `country=${country}&iso=VN&iso3=VNM&pop=95540800&gdp=594900&incomeGrp=4.%20Lower%20middle%20income&region=South-Eastern%20Asia`;
+  // País + ISO únicos por execução pra garantir MISS na 1ª call
+  const country = `TestNation${Date.now()}`;
+  const params = `country=${encodeURIComponent(country)}&iso=ZZ&iso3=ZZZ&pop=1000000&gdp=10000&incomeGrp=Test&region=Test`;
 
   const r1 = await fetch(`${BASE}/api/terminal-data?${params}`);
   const cache1 = r1.headers.get("X-Cache");

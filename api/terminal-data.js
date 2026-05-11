@@ -1,21 +1,21 @@
-// Cache in-memory por país (TTL 60s) para reduzir consumo da NewsAPI free (100 req/dia).
+// Cache in-memory por país (TTL 5min) para proteger a quota da NewsAPI free (100 req/dia).
 // Armazenado em globalThis para sobreviver ao cache-busting do dev-server.
 const cache = globalThis.__terminalCache || (globalThis.__terminalCache = new Map());
-const TTL_MS = 60_000;
+const TTL_MS = 300_000;
 
 // Registro de ativos por país.
 // NOTA: as chaves precisam permanecer em inglês porque vêm do GeoJSON externo (campo ADMIN).
-// Cada país aponta para uma "blue chip" representativa, cotada na bolsa nacional (via Yahoo Finance).
+// Cada país aponta para uma "blue chip" representativa + o índice principal local (via Yahoo Finance).
 const REGISTRY = {
-  "United States of America": { iso: "US", iso3: "USA", ticker: "NVDA",        bench: "S&P 500",    ptBr: "ESTADOS UNIDOS", searchTerms: ['"United States"', '"U.S."', '"USA"'] },
-  "United Kingdom":           { iso: "GB", iso3: "GBR", ticker: "BP.L",        bench: "FTSE 100",   ptBr: "REINO UNIDO",    searchTerms: ['"United Kingdom"', '"U.K."', '"Britain"'] },
-  "Germany":                  { iso: "DE", iso3: "DEU", ticker: "SAP.DE",      bench: "DAX 40",     ptBr: "ALEMANHA",       searchTerms: ['"Germany"', '"German"'] },
-  "France":                   { iso: "FR", iso3: "FRA", ticker: "MC.PA",       bench: "CAC 40",     ptBr: "FRANÇA",         searchTerms: ['"France"'] },
-  "Japan":                    { iso: "JP", iso3: "JPN", ticker: "7203.T",      bench: "NIKKEI 225", ptBr: "JAPÃO",          searchTerms: ['"Japan"', '"Japanese"'] },
-  "China":                    { iso: "CN", iso3: "CHN", ticker: "BABA",        bench: "HSCEI",      ptBr: "CHINA",          searchTerms: ['"China"', '"Beijing"'] },
-  "India":                    { iso: "IN", iso3: "IND", ticker: "RELIANCE.NS", bench: "NIFTY 50",   ptBr: "ÍNDIA",          searchTerms: ['"India"', '"Indian"'] },
-  "Brazil":                   { iso: "BR", iso3: "BRA", ticker: "VALE3.SA",    bench: "IBOVESPA",   ptBr: "BRASIL",         searchTerms: ['"Brazil"', '"Brasília"'] },
-  "Egypt":                    { iso: "EG", iso3: "EGY", ticker: "HRHO.CA",     bench: "EGX 30",     ptBr: "EGITO",          searchTerms: ['"Egypt"', '"Egyptian"', '"Cairo"'] }
+  "United States of America": { iso: "US", iso3: "USA", ticker: "NVDA",        bench: "S&P 500",    benchTicker: "^GSPC",   ptBr: "ESTADOS UNIDOS", searchTerms: ['"United States"', '"U.S."', '"USA"'] },
+  "United Kingdom":           { iso: "GB", iso3: "GBR", ticker: "BP.L",        bench: "FTSE 100",   benchTicker: "^FTSE",   ptBr: "REINO UNIDO",    searchTerms: ['"United Kingdom"', '"U.K."', '"Britain"'] },
+  "Germany":                  { iso: "DE", iso3: "DEU", ticker: "SAP.DE",      bench: "DAX 40",     benchTicker: "^GDAXI",  ptBr: "ALEMANHA",       searchTerms: ['"Germany"', '"German"'] },
+  "France":                   { iso: "FR", iso3: "FRA", ticker: "MC.PA",       bench: "CAC 40",     benchTicker: "^FCHI",   ptBr: "FRANÇA",         searchTerms: ['"France"'] },
+  "Japan":                    { iso: "JP", iso3: "JPN", ticker: "7203.T",      bench: "NIKKEI 225", benchTicker: "^N225",   ptBr: "JAPÃO",          searchTerms: ['"Japan"', '"Japanese"'] },
+  "China":                    { iso: "CN", iso3: "CHN", ticker: "BABA",        bench: "HSCEI",      benchTicker: "^HSCE",   ptBr: "CHINA",          searchTerms: ['"China"', '"Beijing"'] },
+  "India":                    { iso: "IN", iso3: "IND", ticker: "RELIANCE.NS", bench: "NIFTY 50",   benchTicker: "^NSEI",   ptBr: "ÍNDIA",          searchTerms: ['"India"', '"Indian"'] },
+  "Brazil":                   { iso: "BR", iso3: "BRA", ticker: "VALE3.SA",    bench: "IBOVESPA",   benchTicker: "^BVSP",   ptBr: "BRASIL",         searchTerms: ['"Brazil"', '"Brasília"'] },
+  "Egypt":                    { iso: "EG", iso3: "EGY", ticker: "HRHO.CA",     bench: "EGX 30",     benchTicker: "^CASE30", ptBr: "EGITO",          searchTerms: ['"Egypt"', '"Egyptian"', '"Cairo"'] }
 };
 
 const TIER_1 = new Set([
@@ -165,9 +165,12 @@ async function montaRespostaCompleta(config, country, NEWS_KEY) {
   const econOr = '(economy OR market OR stocks OR inflation OR rates OR GDP OR monetary OR fiscal OR trade OR exports OR tariff OR "central bank" OR equities OR bonds OR yield OR debt OR recession OR growth)';
   const q = encodeURIComponent(`(${countryOr}) AND ${econOr}`);
 
-  const [newsRes, stock] = await Promise.all([
+  const [newsRes, stock, index] = await Promise.all([
     fetch(`https://newsapi.org/v2/everything?q=${q}&searchIn=title&sortBy=publishedAt&pageSize=60&language=en&apiKey=${NEWS_KEY}`),
-    buscaCotacaoYahoo(config.ticker)
+    buscaCotacaoYahoo(config.ticker),
+    config.benchTicker
+      ? buscaCotacaoYahoo(config.benchTicker).catch(() => null)
+      : Promise.resolve(null)
   ]);
 
   const newsData = await newsRes.json();
@@ -200,6 +203,10 @@ async function montaRespostaCompleta(config, country, NEWS_KEY) {
     companyName: stock.companyName,
     exchange: stock.exchange,
     bench: config.bench,
+    benchTicker: config.benchTicker,
+    benchPrice: index?.price ?? null,
+    benchChange: index?.change ?? null,
+    benchCurrency: index?.currency ?? null,
     ticker: config.ticker,
     portfolio
   };

@@ -480,6 +480,31 @@
       opacity: 0.5;
       filter: grayscale(0.5);
     }
+
+    /* Linha do benchmark com cotação ao vivo */
+    .bench-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 24px;
+      padding-right: 4px;
+    }
+    .bench-meta {
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+      font-size: 13px;
+      letter-spacing: 0.5px;
+    }
+    #bench-val {
+      color: var(--text);
+      font-weight: 700;
+    }
+    #bench-change {
+      font-weight: 700;
+      min-width: 70px;
+      text-align: right;
+    }
     .footer-tag .blink {
       animation: blink 1.4s ease-in-out infinite;
     }
@@ -528,7 +553,13 @@
     </div>
   </div>
 
-  <span class="label" id="label-bench">Benchmark <span id="bench" style="color: var(--accent); margin-left: 6px; letter-spacing: 1px;">--</span></span>
+  <div id="label-bench" class="bench-row">
+    <span class="label" style="margin: 0;">Benchmark <span id="bench" style="color: var(--accent); margin-left: 6px; letter-spacing: 1px;">--</span></span>
+    <div class="bench-meta">
+      <span id="bench-val">--</span>
+      <span id="bench-change">--</span>
+    </div>
+  </div>
   <div class="price-card" id="price-card">
     <div>
       <div id="tick" class="ticker-id">--</div>
@@ -591,6 +622,12 @@
     const sep = (currency === "JPY") ? 0 : 2;
     const formatado = price.toFixed(sep).replace(/\B(?=(\d{3})+(?!\d))/g, ".").replace(/\.(\d{1,2})$/, ',$1');
     return sym + " " + formatado;
+  }
+  // Pontos de índice (sem moeda, separadores pt-BR)
+  const fmtPts = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 0 });
+  function formataIndice(pts) {
+    if (pts == null) return "--";
+    return fmtPts.format(pts) + " pts";
   }
 
   const sidebar = document.getElementById('sidebar');
@@ -705,12 +742,27 @@
         document.getElementById('label-bench').style.display = 'none';
         document.getElementById('price-card').classList.add('dim');
         document.getElementById('bench').innerText = '—';
+        document.getElementById('bench-val').innerText = '--';
+        document.getElementById('bench-change').innerText = '--';
         document.getElementById('tick').innerText = 'SEM ATIVO MAPEADO';
         document.getElementById('price').innerText = '—';
         cDiv.innerText = '—';
         cDiv.style.color = 'var(--dim)';
       } else {
         document.getElementById('bench').innerText = data.bench;
+        const benchVal = document.getElementById('bench-val');
+        const benchChange = document.getElementById('bench-change');
+        if (data.benchPrice != null) {
+          benchVal.innerText = formataIndice(data.benchPrice);
+          const bc = Number(data.benchChange);
+          benchChange.style.color = bc >= 0 ? 'var(--positive)' : 'var(--alert)';
+          benchChange.innerHTML = (bc >= 0 ? '▲ ' : '▼ ') + Math.abs(bc).toFixed(2).replace('.', ',') + '%';
+        } else {
+          benchVal.innerText = '--';
+          benchChange.innerText = '--';
+          benchChange.style.color = 'var(--dim)';
+        }
+
         const tickerLine = data.exchange
           ? `${data.ticker} <span style="color: var(--dim-2);">· ${data.exchange}</span>`
           : data.ticker;
