@@ -507,7 +507,7 @@
   <div class="session-tag"><span class="ok">●</span> SESSÃO ATIVA // NÓ GEOESPACIAL</div>
 
   <div class="header-group">
-    <img id="flag-img" src="" alt="Bandeira" style="width: 52px; height: auto; display: none; border: 1px solid #2a2f36;">
+    <img id="flag-img" src="" alt="Bandeira" onerror="this.style.display='none';" style="width: 52px; height: auto; display: none; border: 1px solid #2a2f36;">
     <div role="status" aria-live="polite">
       <span id="c-full" class="country-main">EM ESPERA</span>
       <span id="c-iso" class="country-iso">— AGUARDANDO SELEÇÃO</span>
@@ -566,6 +566,18 @@
     "India": "ÍNDIA",
     "Brazil": "BRASIL",
     "Mexico": "MÉXICO"
+  };
+
+  // Correções de ISO para entradas do natural-earth com -99 ou disputas:
+  // - Norway/France: bug do dataset, valores oficiais conhecidos
+  // - Kosovo: ISO_A2=XK extra-oficial, ISO_A3 marcado -99
+  // - Northern Cyprus e Somaliland: estados parcialmente reconhecidos; usamos o sovereign A3
+  const isoOverrides = {
+    "Norway":           { iso: "NO", iso3: "NOR" },
+    "France":           { iso: "FR", iso3: "FRA" },
+    "Kosovo":           { iso: "XK", iso3: "XKX" },
+    "Northern Cyprus":  { iso: "CY", iso3: "CYP" },
+    "Somaliland":       { iso: "SO", iso3: "SOM" }
   };
 
   // Países com telemetria completa (heatmap âmbar no globo)
@@ -630,6 +642,10 @@
     document.getElementById('c-iso').innerText = '— SINCRONIZANDO...';
     document.getElementById('flag-img').style.display = 'none';
     document.getElementById('macro-block').style.display = 'none';
+    document.getElementById('macro-pop').innerText = '--';
+    document.getElementById('macro-gdp').innerText = '--';
+    document.getElementById('macro-income').innerText = '--';
+    document.getElementById('macro-region').innerText = '--';
     document.getElementById('price-card').classList.remove('dim');
     document.getElementById('label-bench').style.display = '';
 
@@ -788,14 +804,19 @@
               : (paisesComDados.has(d.properties.ADMIN) ? 0.012 : 0.005)
           );
         })
-        .onPolygonClick(({ properties: p }) => updateTerminal(p.ADMIN, {
-          iso: p.ISO_A2,
-          iso3: p.ISO_A3,
-          pop: p.POP_EST,
-          gdp: p.GDP_MD_EST,
-          incomeGrp: p.INCOME_GRP,
-          region: p.SUBREGION || p.CONTINENT
-        }));
+        .onPolygonClick(({ properties: p }) => {
+          // Resolve ISO: tenta GeoJSON, ADM0_A3 (sempre presente), depois override manual
+          const ovr = isoOverrides[p.ADMIN] || {};
+          const iso = (p.ISO_A2 && p.ISO_A2 !== '-99') ? p.ISO_A2 : ovr.iso;
+          const iso3 = (p.ISO_A3 && p.ISO_A3 !== '-99') ? p.ISO_A3 : (ovr.iso3 || p.ADM0_A3);
+          updateTerminal(p.ADMIN, {
+            iso, iso3,
+            pop: p.POP_EST,
+            gdp: p.GDP_MD_EST,
+            incomeGrp: p.INCOME_GRP,
+            region: p.SUBREGION || p.CONTINENT
+          });
+        });
     });
 </script>
 </body>
