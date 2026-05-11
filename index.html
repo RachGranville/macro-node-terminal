@@ -437,6 +437,49 @@
       color: var(--dim-2);
       text-align: center;
     }
+
+    /* PERFIL MACRO (modo parcial) */
+    .macro-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-top: 10px;
+    }
+    .macro-cell {
+      background: rgba(245, 166, 35, 0.04);
+      border: 1px solid var(--border);
+      border-left: 2px solid var(--accent);
+      padding: 10px 12px;
+    }
+    .macro-k {
+      color: var(--dim);
+      font-size: 9px;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      margin-bottom: 4px;
+    }
+    .macro-v {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--text);
+    }
+
+    .parcial-badge {
+      display: inline-block;
+      margin-left: 8px;
+      padding: 2px 8px;
+      background: var(--accent-soft);
+      color: var(--accent);
+      font-size: 9px;
+      letter-spacing: 1.5px;
+      font-weight: 700;
+      vertical-align: middle;
+    }
+
+    .price-card.dim {
+      opacity: 0.5;
+      filter: grayscale(0.5);
+    }
     .footer-tag .blink {
       animation: blink 1.4s ease-in-out infinite;
     }
@@ -474,8 +517,19 @@
   <span class="label" id="label-news">Feed Geopolítico e Econômico</span>
   <div id="news-out" aria-live="polite" aria-labelledby="label-news"></div>
 
-  <span class="label">Benchmark <span id="bench" style="color: var(--accent); margin-left: 6px; letter-spacing: 1px;">--</span></span>
-  <div class="price-card">
+  <!-- Bloco macro: visível apenas em modo parcial (país sem ETF mapeado) -->
+  <div id="macro-block" style="display: none;">
+    <span class="label">Perfil Macro</span>
+    <div class="macro-grid">
+      <div class="macro-cell"><div class="macro-k">População</div><div id="macro-pop" class="macro-v">--</div></div>
+      <div class="macro-cell"><div class="macro-k">PIB est.</div><div id="macro-gdp" class="macro-v">--</div></div>
+      <div class="macro-cell"><div class="macro-k">Renda</div><div id="macro-income" class="macro-v">--</div></div>
+      <div class="macro-cell"><div class="macro-k">Região</div><div id="macro-region" class="macro-v">--</div></div>
+    </div>
+  </div>
+
+  <span class="label" id="label-bench">Benchmark <span id="bench" style="color: var(--accent); margin-left: 6px; letter-spacing: 1px;">--</span></span>
+  <div class="price-card" id="price-card">
     <div>
       <div id="tick" class="ticker-id">--</div>
       <div id="price" class="price-val">$0,00</div>
@@ -483,7 +537,7 @@
     <div id="change" class="price-change">--</div>
   </div>
 
-  <span class="label">Portfólio Institucional de 10 Pontos</span>
+  <span class="label" id="label-port">Portfólio Institucional de 10 Pontos</span>
   <table class="strat-table">
     <thead>
       <tr><th>CAT</th><th>ATIVO</th><th>INST</th><th>RISCO</th></tr>
@@ -565,7 +619,7 @@
     document.getElementById('portfolio-list').innerHTML = '';
   }
 
-  async function updateTerminal(country) {
+  async function updateTerminal(country, extras = {}) {
     hint.classList.add('hidden');
     sidebar.classList.add('active');
     globeViz.classList.add('globe-shifted');
@@ -575,6 +629,9 @@
     document.getElementById('c-full').innerText = nomesPaises[country] || country.toUpperCase();
     document.getElementById('c-iso').innerText = '— SINCRONIZANDO...';
     document.getElementById('flag-img').style.display = 'none';
+    document.getElementById('macro-block').style.display = 'none';
+    document.getElementById('price-card').classList.remove('dim');
+    document.getElementById('label-bench').style.display = '';
 
     if (semBackend) {
       loading.classList.remove('active');
@@ -583,7 +640,15 @@
     }
 
     try {
-      const res = await fetch(`/api/terminal-data?country=${encodeURIComponent(country)}`);
+      const params = new URLSearchParams({ country });
+      if (extras.iso && extras.iso !== '-99') params.set('iso', extras.iso);
+      if (extras.iso3 && extras.iso3 !== '-99') params.set('iso3', extras.iso3);
+      if (extras.pop) params.set('pop', extras.pop);
+      if (extras.gdp) params.set('gdp', extras.gdp);
+      if (extras.incomeGrp) params.set('incomeGrp', extras.incomeGrp);
+      if (extras.region) params.set('region', extras.region);
+
+      const res = await fetch(`/api/terminal-data?${params.toString()}`);
       const data = await res.json();
 
       if (!res.ok || data.error) {
@@ -591,7 +656,8 @@
       }
 
       if (data.countryDisplay) {
-        document.getElementById('c-full').innerText = data.countryDisplay;
+        const titulo = data.countryDisplay + (data.parcial ? ' <span class="parcial-badge">PARCIAL</span>' : '');
+        document.getElementById('c-full').innerHTML = titulo;
       }
 
       const fImg = document.getElementById('flag-img');
@@ -604,15 +670,28 @@
         : `<div class="news-box" style="color: var(--dim-2); font-style: italic;">Nenhuma manchete relevante nas últimas 24h.</div>`;
       document.getElementById('news-out').innerHTML = newsHtml;
 
-      document.getElementById('bench').innerText = data.bench;
-      document.getElementById('tick').innerText = data.ticker;
-      document.getElementById('price').innerText = "$" + data.price.toFixed(2).replace('.', ',');
-
-      const change = Number(data.change);
       const cDiv = document.getElementById('change');
-      cDiv.style.color = change >= 0 ? 'var(--positive)' : 'var(--alert)';
-      cDiv.innerHTML = (change >= 0 ? "▲ " : "▼ ") +
-        Math.abs(change).toFixed(2).replace('.', ',') + "%";
+
+      if (data.parcial) {
+        // Painel parcial: sem ETF mapeado
+        document.getElementById('macro-block').style.display = '';
+        renderizaMacro(data.macro);
+        document.getElementById('label-bench').style.display = 'none';
+        document.getElementById('price-card').classList.add('dim');
+        document.getElementById('bench').innerText = '—';
+        document.getElementById('tick').innerText = 'SEM ETF MAPEADO';
+        document.getElementById('price').innerText = '—';
+        cDiv.innerText = '—';
+        cDiv.style.color = 'var(--dim)';
+      } else {
+        document.getElementById('bench').innerText = data.bench;
+        document.getElementById('tick').innerText = data.ticker;
+        document.getElementById('price').innerText = "$" + data.price.toFixed(2).replace('.', ',');
+        const change = Number(data.change);
+        cDiv.style.color = change >= 0 ? 'var(--positive)' : 'var(--alert)';
+        cDiv.innerHTML = (change >= 0 ? "▲ " : "▼ ") +
+          Math.abs(change).toFixed(2).replace('.', ',') + "%";
+      }
 
       document.getElementById('portfolio-list').innerHTML = data.portfolio.map((p) => {
         const isESG = p.cat === 'ESG' ? 'class="esg-row"' : '';
@@ -658,6 +737,31 @@
     }
   }
 
+  function formataPop(n) {
+    if (!n || n <= 0) return '—';
+    if (n >= 1e9) return (n / 1e9).toFixed(2).replace('.', ',') + ' bi';
+    if (n >= 1e6) return (n / 1e6).toFixed(1).replace('.', ',') + ' mi';
+    if (n >= 1e3) return Math.round(n / 1e3) + ' mil';
+    return String(n);
+  }
+  function formataGdp(milhoesUsd) {
+    if (!milhoesUsd || milhoesUsd <= 0) return '—';
+    if (milhoesUsd >= 1e6) return '$' + (milhoesUsd / 1e6).toFixed(2).replace('.', ',') + ' tri';
+    if (milhoesUsd >= 1e3) return '$' + (milhoesUsd / 1e3).toFixed(1).replace('.', ',') + ' bi';
+    return '$' + milhoesUsd + ' mi';
+  }
+  function limpaIncomeGrp(s) {
+    if (!s) return '—';
+    return s.replace(/^\d+\.\s*/, '');
+  }
+  function renderizaMacro(macro) {
+    if (!macro) return;
+    document.getElementById('macro-pop').innerText = formataPop(macro.pop);
+    document.getElementById('macro-gdp').innerText = formataGdp(macro.gdp);
+    document.getElementById('macro-income').innerText = limpaIncomeGrp(macro.incomeGrp);
+    document.getElementById('macro-region').innerText = macro.region || '—';
+  }
+
   fetch('https://raw.githubusercontent.com/vasturiano/globe.gl/master/example/datasets/ne_110m_admin_0_countries.geojson')
     .then(res => res.json())
     .then(data => {
@@ -684,7 +788,14 @@
               : (paisesComDados.has(d.properties.ADMIN) ? 0.012 : 0.005)
           );
         })
-        .onPolygonClick(({ properties: p }) => updateTerminal(p.ADMIN));
+        .onPolygonClick(({ properties: p }) => updateTerminal(p.ADMIN, {
+          iso: p.ISO_A2,
+          iso3: p.ISO_A3,
+          pop: p.POP_EST,
+          gdp: p.GDP_MD_EST,
+          incomeGrp: p.INCOME_GRP,
+          region: p.SUBREGION || p.CONTINENT
+        }));
     });
 </script>
 </body>
