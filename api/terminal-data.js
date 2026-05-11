@@ -1,7 +1,27 @@
-// Cache in-memory por país (TTL 5min) para proteger a quota da NewsAPI free (100 req/dia).
+// Cache in-memory por país. Cada entrada expira na próxima virada das 12:00 BRT.
+// Em prática: cada país consome 1 par de chamadas (Yahoo + NewsAPI) por dia.
 // Armazenado em globalThis para sobreviver ao cache-busting do dev-server.
 const cache = globalThis.__terminalCache || (globalThis.__terminalCache = new Map());
-const TTL_MS = 300_000;
+
+// Retorna o timestamp UTC da próxima 12:00 BRT (UTC-3).
+// 12:00 BRT == 15:00 UTC.
+function proximaAtualizacao12hBRT() {
+  const HORA_BRT = 12;
+  const OFFSET_BRT = -3 * 60 * 60 * 1000;
+  const agora = Date.now();
+  const agoraEmBRT = new Date(agora + OFFSET_BRT);
+  let proximoUTC = Date.UTC(
+    agoraEmBRT.getUTCFullYear(),
+    agoraEmBRT.getUTCMonth(),
+    agoraEmBRT.getUTCDate(),
+    HORA_BRT - (OFFSET_BRT / 3600000), // 12 - (-3) = 15 UTC
+    0, 0, 0
+  );
+  if (agora >= proximoUTC) {
+    proximoUTC += 24 * 60 * 60 * 1000;
+  }
+  return proximoUTC;
+}
 
 // Registro de ativos por país.
 // NOTA: as chaves precisam permanecer em inglês porque vêm do GeoJSON externo (campo ADMIN).
@@ -270,9 +290,13 @@ export default async function handler(req, res) {
   const config = REGISTRY[country];
   const cacheKey = config ? country : `parcial:${country}`;
   const cached = cache.get(cacheKey);
-  if (cached && cached.expiresAt > Date.now()) {
+  // Entries antigas sem cachedAt são consideradas inválidas (formato pré-feature).
+  const cacheValido = cached && typeof cached.cachedAt === "number" && typeof cached.expiresAt === "number" && cached.expiresAt > Date.now();
+  if (cacheValido) {
     res.setHeader("X-Cache", "HIT");
-    return res.status(200).json(cached.data);
+    res.setHeader("X-Cached-At", new Date(cached.cachedAt).toISOString());
+    res.setHeader("X-Next-Refresh", new Date(cached.expiresAt).toISOString());
+    return res.status(200).json({ ...cached.data, cachedAt: cached.cachedAt, nextRefresh: cached.expiresAt });
   }
 
   try {
@@ -293,9 +317,13 @@ export default async function handler(req, res) {
       data = await montaRespostaParcial({ country, iso, iso3, pop, gdp, incomeGrp, region, NEWS_KEY });
     }
 
-    cache.set(cacheKey, { data, expiresAt: Date.now() + TTL_MS });
+    const cachedAt = Date.now();
+    const expiresAt = proximaAtualizacao12hBRT();
+    cache.set(cacheKey, { data, cachedAt, expiresAt });
     res.setHeader("X-Cache", "MISS");
-    res.status(200).json(data);
+    res.setHeader("X-Cached-At", new Date(cachedAt).toISOString());
+    res.setHeader("X-Next-Refresh", new Date(expiresAt).toISOString());
+    res.status(200).json({ ...data, cachedAt, nextRefresh: expiresAt });
   } catch (e) {
     res.status(500).json({ error: true, message: e.message });
   }

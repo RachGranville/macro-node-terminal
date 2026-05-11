@@ -47,6 +47,12 @@ for (const c of VALIDOS) {
   if (typeof d.benchPrice !== "number" || d.benchPrice <= 0) errors.push(`benchPrice inválido: ${d.benchPrice}`);
   if (typeof d.benchChange !== "number") errors.push(`benchChange inválido: ${d.benchChange}`);
   if (!d.benchTicker) errors.push(`benchTicker ausente`);
+  if (typeof d.cachedAt !== "number") errors.push(`cachedAt ausente`);
+  if (typeof d.nextRefresh !== "number") errors.push(`nextRefresh ausente`);
+  if (d.nextRefresh <= d.cachedAt) errors.push(`nextRefresh deve ser > cachedAt`);
+  // nextRefresh deve cair em algum dia às 12:00 BRT (15:00 UTC)
+  const next = new Date(d.nextRefresh);
+  if (next.getUTCHours() !== 15 || next.getUTCMinutes() !== 0) errors.push(`nextRefresh não é 12:00 BRT: ${next.toISOString()}`);
   if (!d.flag || !d.flag.includes(exp.iso)) errors.push(`flag URL: ${d.flag}`);
   if (!Array.isArray(d.news)) errors.push(`news não é array`);
   if (d.news.length > 5) errors.push(`news > 5: ${d.news.length}`);

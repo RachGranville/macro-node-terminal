@@ -481,6 +481,26 @@
       filter: grayscale(0.5);
     }
 
+    /* Linha de label com timestamp à direita */
+    .label-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      margin-top: 24px;
+    }
+    .news-stamp {
+      color: var(--dim-2);
+      font-size: 9px;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+    .news-stamp strong {
+      color: var(--accent);
+      font-weight: 700;
+    }
+
     /* Linha do benchmark com cotação ao vivo */
     .bench-row {
       display: flex;
@@ -539,7 +559,10 @@
     </div>
   </div>
 
-  <span class="label" id="label-news">Feed Geopolítico e Econômico</span>
+  <div class="label-row">
+    <span class="label" id="label-news" style="margin: 0;">Feed Geopolítico e Econômico</span>
+    <span id="news-stamp" class="news-stamp"></span>
+  </div>
   <div id="news-out" aria-live="polite" aria-labelledby="label-news"></div>
 
   <!-- Bloco macro: visível apenas em modo parcial (país sem ETF mapeado) -->
@@ -628,6 +651,15 @@
   function formataIndice(pts) {
     if (pts == null) return "--";
     return fmtPts.format(pts) + " pts";
+  }
+
+  // Timestamp pt-BR no fuso BRT
+  function formataBRT(ts, completo = false) {
+    if (!ts) return "";
+    const opts = completo
+      ? { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' }
+      : { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' };
+    return new Date(ts).toLocaleString('pt-BR', opts);
   }
 
   const sidebar = document.getElementById('sidebar');
@@ -730,8 +762,15 @@
 
       const newsHtml = data.news.length
         ? data.news.map(n => `<div class="news-box">› ${n}</div>`).join('')
-        : `<div class="news-box" style="color: var(--dim-2); font-style: italic;">Nenhuma manchete relevante nas últimas 24h.</div>`;
+        : `<div class="news-box" style="color: var(--dim-2); font-style: italic;">Nenhuma manchete relevante para esta janela.</div>`;
       document.getElementById('news-out').innerHTML = newsHtml;
+
+      const stamp = document.getElementById('news-stamp');
+      if (data.cachedAt && data.nextRefresh) {
+        stamp.innerHTML = `Atualizado <strong>${formataBRT(data.cachedAt, true)}</strong> · Próximo <strong>${formataBRT(data.nextRefresh, true)}</strong> BRT`;
+      } else {
+        stamp.innerHTML = '';
+      }
 
       const cDiv = document.getElementById('change');
 

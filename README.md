@@ -14,7 +14,7 @@ Ferramentas financeiras tradicionais costumam esconder dados regionais atrás de
 * **Modo parcial dinâmico:** ao clicar em qualquer outro país do globo (~170 a mais), o terminal monta um perfil macro a partir do GeoJSON do natural-earth (população, PIB estimado, faixa de renda, sub-região) e busca manchetes específicas do país. Sem dados fake nem fallback genérico.
 * **Engine de Portfólio Estratégico de 10 Pontos:** modelo de alocação que combina renda variável (ação local, opção, futuro), câmbio, renda fixa soberana (10Y/2Y) e ESG (solar, eólica, títulos verdes).
 * **Feed de Inteligência Algorítmica:** filtro multi-camada sobre a NewsAPI: o país precisa estar no título, a manchete precisa conter termo econômico, fontes irrelevantes (flight deals, esporte, entretenimento) são bloqueadas por *blocklist*, fontes financeiras tier-1 (Reuters, Bloomberg, FT, WSJ, etc.) recebem boost no ranking, e manchetes sobre o mesmo tópico são deduplicadas via *stemming* de prefixo.
-* **Cache server-side de 60s:** reduz consumo da NewsAPI free (100 req/dia) e acelera cliques repetidos (HIT em ~3 ms).
+* **Cache server-side com refresh diário às 12:00 BRT:** cada país é buscado uma única vez por dia. Cliques subsequentes vêm do cache (HIT em ~3 ms) até a próxima virada do horário, protegendo a quota da NewsAPI free (100 req/dia). O painel exibe os timestamps de "Atualizado" e "Próximo" no rodapé do feed.
 * **UX/UI "Aero-Glass":** painel semitransparente (`backdrop-filter`) que desliza enquanto o globo se desloca lateralmente, mantendo a visualização 3D sempre visível.
 * **Backend Serverless:** implantado na Vercel com `Promise.all` para chamadas paralelas das APIs externas, garantindo latência ultrabaixa.
 
