@@ -550,7 +550,20 @@
   tickClock();
   setInterval(tickClock, 1000);
 
-  const isFileProtocol = window.location.protocol === 'file:';
+  const semBackend = !['http:', 'https:'].includes(window.location.protocol);
+
+  function mostrarAvisoSemBackend() {
+    document.getElementById('flag-img').style.display = 'none';
+    document.getElementById('c-iso').innerText = '— SEM CONEXÃO COM A API';
+    document.getElementById('news-out').innerHTML =
+      `<div class="news-box" style="color: var(--alert);">› A API serverless precisa de um servidor HTTP para responder.</div>
+       <div class="news-box" style="color: var(--dim);">› Abra o terminal, navegue até a pasta do projeto e rode <strong style="color: var(--accent);">node dev-server.js</strong>, depois acesse <strong style="color: var(--accent);">http://localhost:3000</strong> em um navegador.</div>`;
+    document.getElementById('bench').innerText = '--';
+    document.getElementById('tick').innerText = '--';
+    document.getElementById('price').innerText = '$--';
+    document.getElementById('change').innerText = '--';
+    document.getElementById('portfolio-list').innerHTML = '';
+  }
 
   async function updateTerminal(country) {
     hint.classList.add('hidden');
@@ -563,17 +576,9 @@
     document.getElementById('c-iso').innerText = '— SINCRONIZANDO...';
     document.getElementById('flag-img').style.display = 'none';
 
-    if (isFileProtocol) {
+    if (semBackend) {
       loading.classList.remove('active');
-      document.getElementById('c-iso').innerText = '— SERVIDOR OFFLINE';
-      document.getElementById('news-out').innerHTML =
-        `<div class="news-box" style="color: var(--alert);">› O terminal está rodando direto do filesystem (file://). É preciso servi-lo via HTTP.</div>
-         <div class="news-box" style="color: var(--dim);">› Abra o terminal, navegue até a pasta do projeto e rode <strong style="color: var(--accent);">node dev-server.js</strong>, depois acesse <strong style="color: var(--accent);">http://localhost:3000</strong>.</div>`;
-      document.getElementById('bench').innerText = '--';
-      document.getElementById('tick').innerText = '--';
-      document.getElementById('price').innerText = '$--';
-      document.getElementById('change').innerText = '--';
-      document.getElementById('portfolio-list').innerHTML = '';
+      mostrarAvisoSemBackend();
       return;
     }
 
@@ -623,16 +628,30 @@
         </tr>`;
       }).join('');
     } catch (err) {
-      document.getElementById('c-iso').innerText = '— ERRO';
+      const networkFail = /Failed to (parse URL|fetch)|NetworkError|Load failed/i.test(err.message);
+      const semRegistry = /sem telemetria configurada/i.test(err.message);
+
       document.getElementById('flag-img').style.display = 'none';
-      document.getElementById('news-out').innerHTML =
-        `<div class="news-box" style="color: var(--alert);">› Falha ao buscar telemetria: ${err.message}</div>`;
       document.getElementById('bench').innerText = '--';
       document.getElementById('tick').innerText = '--';
       document.getElementById('price').innerText = '$--';
       document.getElementById('change').innerText = '--';
       document.getElementById('change').style.color = 'var(--dim)';
       document.getElementById('portfolio-list').innerHTML = '';
+
+      if (networkFail) {
+        mostrarAvisoSemBackend();
+      } else if (semRegistry) {
+        document.getElementById('c-iso').innerText = '— TELEMETRIA INDISPONÍVEL';
+        document.getElementById('news-out').innerHTML =
+          `<div class="news-box" style="color: var(--dim);">› Este país ainda não tem telemetria configurada nesta versão do terminal.</div>
+           <div class="news-box" style="color: var(--dim);">› Países cobertos: <strong style="color: var(--accent);">USA · GBR · DEU · FRA · JPN · CHN · IND · BRA · MEX</strong></div>
+           <div class="news-box" style="color: var(--dim-2); font-size: 12px;">Os países disponíveis aparecem em <span style="color: var(--accent);">âmbar</span> no globo.</div>`;
+      } else {
+        document.getElementById('c-iso').innerText = '— ERRO';
+        document.getElementById('news-out').innerHTML =
+          `<div class="news-box" style="color: var(--alert);">› Falha ao buscar telemetria: ${err.message}</div>`;
+      }
       console.error("[terminal] erro:", err);
     } finally {
       loading.classList.remove('active');
@@ -646,16 +665,16 @@
         .polygonStrokeColor(() => '#f5a623')
         .polygonCapColor(({ properties: p }) =>
           paisesComDados.has(p.ADMIN)
-            ? 'rgba(245, 166, 35, 0.22)'
-            : 'rgba(245, 166, 35, 0.025)'
+            ? 'rgba(245, 166, 35, 0.45)'
+            : 'rgba(245, 166, 35, 0.015)'
         )
         .polygonSideColor(({ properties: p }) =>
           paisesComDados.has(p.ADMIN)
-            ? 'rgba(245, 166, 35, 0.18)'
+            ? 'rgba(245, 166, 35, 0.35)'
             : 'rgba(0, 0, 0, 0.15)'
         )
         .polygonAltitude(({ properties: p }) =>
-          paisesComDados.has(p.ADMIN) ? 0.012 : 0.005
+          paisesComDados.has(p.ADMIN) ? 0.025 : 0.005
         )
         .polygonsTransitionDuration(300)
         .onPolygonHover(hoverD => {
